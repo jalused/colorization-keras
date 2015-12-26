@@ -97,10 +97,10 @@ else:
     middle_train_index = train_index[0 : 2000]
     middle_test_index = test_index[0 : 500]
     
-    mini_train_x = train_x[mini_index, :, :]
-    mini_test_x = test_x[mini_index, :, :]
-    mini_train_labels = train_labels[mini_index, :, :]
-    mini_test_labels = test_labels[mini_index, :, :]
+    mini_train_x = train_x[mini_train_index, :, :]
+    mini_test_x = test_x[mini_test_index, :, :]
+    mini_train_labels = train_labels[mini_train_index, :, :]
+    mini_test_labels = test_labels[mini_test_index, :, :]
     
     middle_train_x = train_x[middle_train_index, :, :]
     middle_test_x = test_x[middle_test_index, :, :]
