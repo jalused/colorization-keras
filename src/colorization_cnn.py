@@ -9,20 +9,20 @@ import numpy as np
 
 from keras.models import Sequential
 from keras.layers.core import Dense, Dropout, Activation, Flatten, Merge
-from keras.layers.convolutional import Convolution2D, MaxPooling2D
-from keras.optimizers import sgd, SGD
+from keras.layers.convolutional import Convolution2D, MaxPooling2D, ZeroPadding2D
+from keras.optimizers import sgd, SGD, RMSprop
 from keras.utils import np_utils
 from keras.regularizers import l2
 
 from PIL import Image
 from util import *
 
-data_path = "/home/jiangliang/code/colorization-keras/data/"
+data_path = "../data/"
 data_file = "yuv_image/mini_class_train.npz"
 cluster_center_file = "cluster_center.npz"
-result_path = "/home/jiangliang/code/colorization-keras/result/"
+result_path = "../result/"
 result_file = "result.npz"
-param_path = "/home/jiangliang/code/colorization-keras/params/"
+param_path = "../params/"
 param_file = "param"
 
 print("Loading data")
@@ -37,22 +37,8 @@ test_y = test_y.astype(int)
 cluster = np.load(data_path + cluster_center_file)
 cluster_center = cluster["cluster_center"]
 
-#plt.plot(cluster_center[:, 0], cluster_center[:, 1], "*")
-
-print(str(test_y[1][0][23748]))
-#print(str(cluster_center[117, :]))
-print(str(cluster_center[test_y[1][0][23748]]))
-
-# u = train_y[:, 0, :];
-# max = np.max(u)
-# min = np.min(u)
-#
-# v = train_y[:, 1, :];
-# max = np.max(v)
-# min = np.min(v)
-
 opts = {}
-opts["img_patch_size"] = 7
+opts["img_patch_size"] = 45
 opts["img_pixel_feature_patch_size"] = 7
 opts["num_patches"] = 65536
 opts["color_patch_size"] = 1
@@ -89,47 +75,40 @@ opts["classes"] = 128
 #im = Image.fromarray(converted_rgb)
 #im.show()
 
+empty_data = np.empty([opts["num_patches"], 0])
+
 pixel_model = Sequential()
 pixel_model.add(Flatten(input_shape=(opts["img_pixel_feature_patch_size"] * opts["img_pixel_feature_patch_size"], )))
 
-#pixel_model.add(Dense(opts["classes"], W_regularizer = l2(0.01), b_regularizer = l2(0.01)))
-#pixel_model.add(Activation("softmax"))
-
 texture_model = Sequential()
-texture_model.add(Convolution2D(128, 5, 5, border_mode = 'valid', input_shape = (1, opts["img_patch_size"], opts["img_patch_size"])))
-texture_model.add(Activation('relu'))
-#texture_model.add(MaxPooling2D(pool_size=(2, 2)))
-#texture_model.add(Convolution2D(64, 3, 3, border_mode= 'valid'))
-#texture_model.add(Activation('relu'))
-#texture_model.add(MaxPooling2D(pool_size=(2, 2)))
-#texture_model.add(Convolution2D(128, 3, 3, border_mode= 'valid'))
-#texture_model.add(Activation('relu'))
-#texture_model.add(MaxPooling2D(pool_size=(2, 2)))
-#texture_model.add(Activation('relu'))
-#texture_model.add(MaxPooling2D(pool_size=(2, 2)))
+texture_model.add(ZeroPadding2D(padding = (2, 2), input_shape = (1, opts["img_patch_size"], opts["img_patch_size"])))
+texture_model.add(Convolution2D(3, 5, 5, border_mode = 'valid', activation = 'relu'))
+texture_model.add(ZeroPadding2D(padding = (2, 2)))
+texture_model.add(Convolution2D(48, 5, 5, border_mode = 'valid', activation = 'relu'))
+texture_model.add(MaxPooling2D(pool_size = (3, 3), strides = (2, 2)))
+texture_model.add(ZeroPadding2D(padding = (2, 2)))
+texture_model.add(Convolution2D(64, 5, 5, border_mode = 'valid', activation = 'relu'))
+texture_model.add(ZeroPadding2D(padding = (2, 2)))
+texture_model.add(Convolution2D(64, 5, 5, border_mode = 'valid', activation = 'relu'))
+texture_model.add(MaxPooling2D(pool_size = (3, 3), strides = ([2, 2])))
+texture_model.add(ZeroPadding2D(padding = (2, 2)))
+texture_model.add(Convolution2D(64, 5, 5, border_mode = 'valid', activation = 'relu'))
+texture_model.add(MaxPooling2D(pool_size = (3, 3), strides = ([2, 2])))
 texture_model.add(Flatten())
-texture_model.add(Dense(8 * opts["classes"], W_regularizer = l2(0.01), b_regularizer = l2(0.01)))
-texture_model.add(Activation("sigmoid"))
-texture_model.add(Dense(4 * opts["classes"], W_regularizer = l2(0.01), b_regularizer = l2(0.01)))
-texture_model.add(Activation("sigmoid"))
 texture_model.add(Dense(2 * opts["classes"], W_regularizer = l2(0.01), b_regularizer = l2(0.01)))
-texture_model.add(Activation("sigmoid"))
-texture_model.add(Dense(opts["classes"], W_regularizer = l2(0.01), b_regularizer = l2(0.01)))
-texture_model.add(Activation('softmax'))
+texture_model.add(Activation("relu"))
+texture_model.add(Dropout(0.5))
 
 model = Sequential()
 model.add(Merge([pixel_model, texture_model], mode = "concat"))
-model.add(Dense(2 * opts["classes"], W_regularizer = l2(0.01), b_regularizer = l2(0.01)))
-model.add(Activation("sigmoid"))
-model.add(Dense(2 * opts["classes"], W_regularizer = l2(0.01), b_regularizer = l2(0.01)))
-model.add(Activation("sigmoid"))
 model.add(Dense(opts["classes"], W_regularizer = l2(0.01), b_regularizer = l2(0.01)))
 model.add(Activation('softmax'))
 
 print("Compiling model")
 sgd = SGD(momentum = 0.8, decay = 10e-4)
-#model.compile(loss = 'categorical_crossentropy', optimizer = sgd)
-texture_model.compile(loss = 'categorical_crossentropy', optimizer = sgd)
+rms = RMSprop()
+model.compile(loss = 'categorical_crossentropy', optimizer = rms)
+#texture_model.compile(loss = 'categorical_crossentropy', optimizer = sgd)
 #pixel_model.compile(loss = 'categorical_crossentropy', optimizer = sgd)
 #deal with command line parameters
 if (len(sys.argv) > 1):
@@ -158,16 +137,16 @@ if (opts["train_flag"]):
     train_y_vector = np_utils.to_categorical(train_y_vector, opts["classes"]) 
 
     print("Fitting")
-    #model.fit([train_x_vector, train_x_patches], train_y_vector, batch_size=opts["batch_size"], nb_epoch=opts["epoch"], show_accuracy=True, verbose=1)
-    texture_model.fit([train_x_patches], train_y_vector, batch_size=opts["batch_size"], nb_epoch=opts["epoch"], show_accuracy=True, verbose=1)
+    model.fit([train_x_vector, train_x_patches], train_y_vector, batch_size=opts["batch_size"], nb_epoch=opts["epoch"], show_accuracy=True, verbose=1)
+    #texture_model.fit([train_x_pixel_patches, train_x_patches], train_y_vector, batch_size=opts["batch_size"], nb_epoch=opts["epoch"], show_accuracy=True, verbose=1)
     #pixel_model.fit(train_x_vector, train_y_vector, batch_size=opts["batch_size"], nb_epoch=opts["epoch"], show_accuracy=True, verbose=1)
     texture_model.save_weights(param_path + param_file, overwrite=True)
 else:
     print("Load Weights")
     texture_model.load_weights(param_path + param_file)
 
-test_x = train_x[0, :, :].reshape(1, train_x.shape[1], train_x.shape[2])
-test_y = train_y[0, :, :].reshape(1, train_y.shape[1], train_y.shape[2])
+test_x = test_x[0, :, :].reshape(1, train_x.shape[1], train_x.shape[2])
+test_y = test_y[0, :, :].reshape(1, train_y.shape[1], train_y.shape[2])
 test_x = test_x[0, :, :].reshape(1, test_x.shape[1], test_x.shape[2])
 test_y = test_y[0, :, :].reshape(1, test_y.shape[1], test_y.shape[2])
 
@@ -190,10 +169,9 @@ for i in range(test_x_vector.shape[0]):
     y_vector = np_utils.to_categorical(y_vector, opts["classes"])
 
     #[score, acc] = model.evaluate([x_vector, x_patch], y_vector, show_accuracy=True, verbose = 1)
-    [score, acc] = texture_model.evaluate([x_patch], y_vector, show_accuracy=True, verbose = 1)
-    print("score: " + str(score) + ", acc: " + str(acc))
-    #predict_color = model.predict([x_vector, x_patch], verbose = 1)
-    predict_color = texture_model.predict([x_patch], verbose = 1)
+    #print("score: " + str(score) + ", acc: " + str(acc))
+    predict_color = model.predict([x_vector, x_patch], verbose = 1)
+    #predict_color = texture_model.predict([x_patch], verbose = 1)
     predict_color = predict_color.argmax(1)
     predict_color = cluster_center[predict_color, :]
     predict_color = predict_color.transpose().reshape(2, np.sqrt(predict_color.shape[0]), np.sqrt(predict_color.shape[0]))
