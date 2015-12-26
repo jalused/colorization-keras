@@ -8,14 +8,14 @@ data_path = "/home/jiangliang/code/colorization-keras/data/"
 data_file = "yuv_image/train.npz"
 result_file = "yuv_image/class_train.npz"
 mini_result_file = "yuv_image/mini_class_train.npz"
-center_file = "center.npz"
+middle_result_file = "yuv_image/middle_class_train.npz"
 cluster_center_file = "cluster_center.npz"
 
 opts = {}
 opts["img_patch_size"] = 35
 opts["img_pixel_feature_patch_size"] = 3
-opts["num_patches"] = 2048
-opts["color_patch_size"] = 35
+opts["num_patches"] = 30000
+opts["color_patch_size"] = 11
 opts["batch_size"] = 128
 opts["epoch"] = 1
 opts["train_flag"] = False
@@ -31,6 +31,7 @@ test_y = data["test_y"]
 
 if (opts["train_flag"]):
     cluster = KMeans(n_clusters = 128, max_iter = 3000, n_init = 10, precompute_distances = True, n_jobs = -1, verbose = 1, copy_x = True)
+    print("Getting random patches")
     [temp1, temp2, y] = rand_patches(train_x, train_y, opts)
     print(str(y.shape))
     y_vector = np.zeros((y.shape[0] * y.shape[2], 2))
@@ -39,7 +40,9 @@ if (opts["train_flag"]):
         temp = y[i, :, :]
         temp = temp.transpose()
         y_vector[i * y.shape[2] : (i + 1) * y.shape[2], :] = temp
+    print("fitting model")
     cluster.fit(y_vector, y=None)
+    print("saving data")
     np.savez(data_path + cluster_center_file, cluster_center = cluster.cluster_centers_)
 else:
     cluster = KMeans(n_clusters = 128, max_iter = 3000, n_init = 10, precompute_distances = True, n_jobs = -1, verbose = 1, copy_x = True)
@@ -51,7 +54,6 @@ else:
 
     train_y_vector = np.zeros((train_y.shape[0] * train_y.shape[2], 2))
     train_labels = np.zeros((train_y.shape[0], 1, train_y.shape[2]))
-    train_labels = train_labels - 1
     for i in range(train_y.shape[0]):
         print("i: " + str(i))
         temp = train_y[i, :, :]
@@ -85,12 +87,29 @@ else:
     else:
         print("Right")
     
-    mini_train_x = train_x[0 : 30, :, :]
-    mini_test_x = test_x[0 : 30, :, :]
-    mini_train_labels = train_labels[0 : 30, :, :]
-    mini_test_labels = test_labels[0 : 30, :, :]
+    train_index = np.arange(train_y.shape[0])
+    test_index = np.arange(test_y.shape[0])
+    np.random.shuffle(train_index)
+    np.random.shuffle(test_index)
+    
+    mini_train_index = train_index[0 : 100]
+    mini_test_index = test_index[0 : 30]
+    middle_train_index = train_index[0 : 2000]
+    middle_test_index = test_index[0 : 500]
+    
+    mini_train_x = train_x[mini_index, :, :]
+    mini_test_x = test_x[mini_index, :, :]
+    mini_train_labels = train_labels[mini_index, :, :]
+    mini_test_labels = test_labels[mini_index, :, :]
+    
+    middle_train_x = train_x[middle_train_index, :, :]
+    middle_test_x = test_x[middle_test_index, :, :]
+    middle_train_labels = train_labels[middle_train_index, :, :]
+    middle_test_labels = test_labels[middle_test_index, :, :]
+
     np.savez(data_path + result_file, train_x = train_x, test_x = test_x, train_y = train_labels, test_y = test_labels)
     np.savez(data_path + mini_result_file, train_x = mini_train_x, test_x = mini_test_x, train_y = mini_train_labels, test_y = mini_test_labels)
+    np.savez(data_path + middle_result_file, train_x = middle_train_x, test_x = middle_test_x, train_y = middle_train_labels, test_y = middle_test_labels)
 print("finish")
 
 
